@@ -10,6 +10,13 @@ import { LogOut, RefreshCw, BarChart2, Filter } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import ReactECharts from "echarts-for-react";
 
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return '/_/backend';
+  }
+  return 'http://localhost:8080';
+};
+
 export default function DashboardPage() {
   const { accessToken } = useAuth();
   const [lastSynced, setLastSynced] = useState<string>("Never");
@@ -53,7 +60,7 @@ export default function DashboardPage() {
       
       // Fetch Live Data
       setIsLoadingData(true);
-      const dataRes = await fetch("http://localhost:8080/api/sheets/1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE/data", {
+      const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE/data`, {
         headers: {
           "Authorization": `Bearer ${accessToken}`
         }
