@@ -9,6 +9,7 @@
 1. **Project Creation:** A Firebase project named `Synapse` was created at `console.firebase.google.com`. Google Analytics is disabled.
 2. **Web App Registration:** A web app named `synapse-web` was registered to generate the core `firebaseConfig` object containing the `apiKey`, `authDomain`, `projectId`, etc.
 3. **Authentication:** The Google Sign-In provider was enabled under `Build > Authentication`.
+   * **CRITICAL PRODUCTION STEP:** For production deployments (e.g., Vercel), you MUST manually add your live domain (e.g., `synapse-xxx.vercel.app`) to the **Authorized domains** list under `Authentication > Settings > Authorized domains`. Otherwise, Google will silently block the login popup on the live site.
 4. **Database:** Firestore was initialized under `Build > Firestore Database` and set to **Test Mode** to allow unrestricted reads/writes during the initial 30-day development sprint.
 
 ## 2. Google Cloud APIs & OAuth Verification
