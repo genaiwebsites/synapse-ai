@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
@@ -26,20 +26,61 @@ export default function DashboardPage() {
   const [activeFilters, setActiveFilters] = useState<{ [key: string]: string }>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
 
+  const isGeneratedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    isGeneratedRef.current = !!generatedSchema;
+  }, [generatedSchema]);
+
+  const fetchLiveData = async (isBackground = false) => {
+    if (!accessToken) return;
+    if (!isBackground) setIsLoadingData(true);
+    try {
+      const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE/data`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      const sheetData = await dataRes.json();
+      setRawSheetData(sheetData);
+      setLastSynced(new Date().toLocaleString());
+    } catch (err) {
+      console.error("Live data fetch failed:", err);
+    } finally {
+      if (!isBackground) setIsLoadingData(false);
+    }
+  };
+
   useEffect(() => {
+    let initialLoad = true;
     const unsub = onSnapshot(
       doc(db, "dashboards", "jeevan_rekha", "sync_metadata", "latest"),
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
           if (data.lastUpdated) {
-            setLastSynced(data.lastUpdated.toDate().toLocaleString());
+            // Only trigger background fetch if it's not the initial mount subscription
+            // and the schema has already been generated
+            if (!initialLoad && isGeneratedRef.current) {
+              console.log("Webhook triggered Firestore update! Fetching new data...");
+              fetchLiveData(true);
+            }
           }
         }
+        initialLoad = false;
       }
     );
     return () => unsub();
   }, [accessToken]);
+
+  // Foolproof Fallback: Auto-poll the spreadsheet every 1 hour (3600000 ms)
+  // Guarantees data stays fresh even if the Webhook / Cloud Function fails to trigger
+  useEffect(() => {
+    if (!generatedSchema) return;
+    const interval = setInterval(() => {
+      console.log("Auto-polling spreadsheet data...");
+      fetchLiveData(true);
+    }, 3600000); // 1 hour
+    return () => clearInterval(interval);
+  }, [generatedSchema, accessToken]);
 
   const handleGenerateLayout = async () => {
     if (!accessToken) return;
@@ -59,18 +100,9 @@ export default function DashboardPage() {
       setGeneratedSchema(data);
       
       // Fetch Live Data
-      setIsLoadingData(true);
-      const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE/data`, {
-        headers: {
-          "Authorization": `Bearer ${accessToken}`
-        }
-      });
-      const sheetData = await dataRes.json();
-      console.log("--- FETCHED LIVE SPREADSHEET DATA ---");
-      console.log(`Fetched ${sheetData.length} rows`);
-      setRawSheetData(sheetData);
+      await fetchLiveData(false);
     } catch (err) {
-      console.error("Orchestration/Data fetch failed:", err);
+      console.error("Orchestration failed:", err);
     } finally {
       setIsGenerating(false);
       setIsLoadingData(false);
@@ -101,9 +133,22 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-3xl font-bold font-space text-white tracking-tight">Analytics Overview</h1>
             <p className="text-zinc-400 mt-1">Jeevan Rekha Rice Bran Oil Manufacturing</p>
-            <div className="flex items-center text-xs text-zinc-500 mt-2 gap-1">
-              <RefreshCw className="w-3 h-3" />
-              Last Synced: {lastSynced}
+            <div className="flex items-center text-xs text-zinc-500 mt-2 gap-2">
+              <span className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-md border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] animate-pulse"></span>
+                Live Sync Active
+              </span>
+              <span>Last Synced: <span className="text-zinc-300">{lastSynced}</span></span>
+              {generatedSchema && (
+                <button 
+                  onClick={() => fetchLiveData(false)} 
+                  disabled={isLoadingData}
+                  className="ml-2 hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 p-1 rounded-md transition-colors disabled:opacity-50"
+                  title="Manual Refresh"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingData ? 'animate-spin' : ''}`} />
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
