@@ -161,6 +161,9 @@ async def get_sheet_metadata(spreadsheet_id: str, creds: Credentials = Depends(g
         return metadata
     except Exception as e:
         logger.error(f"Failed to fetch spreadsheet metadata: {e}")
+        err_msg = str(e)
+        if any(term in err_msg.lower() for term in ["credential", "token", "refresh", "401"]):
+            raise HTTPException(status_code=401, detail="Google OAuth session expired. Please sign out and sign in again.")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sheets/{spreadsheet_id}/data")
@@ -214,6 +217,9 @@ async def get_sheet_data(spreadsheet_id: str, creds: Credentials = Depends(get_g
         return data
     except Exception as e:
         logger.error(f"Failed to fetch sheet data: {e}")
+        err_msg = str(e)
+        if any(term in err_msg.lower() for term in ["credential", "token", "refresh", "401"]):
+            raise HTTPException(status_code=401, detail="Google OAuth session expired. Please sign out and sign in again.")
         raise HTTPException(status_code=500, detail=str(e))
 
 

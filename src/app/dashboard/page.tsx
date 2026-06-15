@@ -33,6 +33,11 @@ export default function DashboardPage() {
         headers: { "Authorization": `Bearer ${accessToken}` }
       });
       if (!dataRes.ok) {
+        if (dataRes.status === 401) {
+          console.warn("Google OAuth session expired. Redirecting to logout...");
+          handleLogout();
+          return;
+        }
         const errText = await dataRes.text();
         throw new Error(`Server returned ${dataRes.status}: ${errText}`);
       }
@@ -97,7 +102,7 @@ export default function DashboardPage() {
       })
     : [];
 
-  const handleLogout = async () => {
+  async function handleLogout() {
     try {
       await signOut(auth);
       sessionStorage.removeItem("googleAccessToken");
@@ -105,7 +110,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Logout failed:", error);
     }
-  };
+  }
 
   return (
     <DashboardLayout>
