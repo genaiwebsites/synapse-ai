@@ -1,0 +1,48 @@
+{
+  "spreadsheetId": "1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE",
+  "sheetRange": "'RRBO Sales Report'!A:E",
+  "columns": [
+    { "index": 0, "key": "OIL TYPE", "headerName": "OIL TYPE", "type": "string" },
+    { "index": 1, "key": "ITEM NAME", "headerName": "ITEM NAME", "type": "string" },
+    { "index": 2, "key": "DELIVERY SALE (QTY)", "headerName": "DELIVERY SALE (QTY)", "type": "number" },
+    { "index": 3, "key": "CONVERSION (LITRES)", "headerName": "CONVERSION (LITRES)", "type": "number" },
+    { "index": 4, "key": "MONTH", "headerName": "MONTH", "type": "string" }
+  ],
+  "kpis": [
+    {
+      "id": "kpi_total_volume",
+      "title": "Total Volume (Litres)",
+      "description": "Total Rice Bran Oil conversion",
+      "operation": "sum",
+      "targetKey": "CONVERSION (LITRES)",
+      "format": "volume"
+    },
+    {
+      "id": "kpi_total_qty",
+      "title": "Total Delivery (Qty)",
+      "description": "Total units delivered across all packaging",
+      "operation": "sum",
+      "targetKey": "DELIVERY SALE (QTY)",
+      "format": "units"
+    }
+  ],
+  "charts": [
+    {
+      "id": "chart_monthly_trend",
+      "title": "Monthly Volume Trend",
+      "type": "bar",
+      "groupByKey": "MONTH",
+      "targetKey": "CONVERSION (LITRES)",
+      "operation": "sum"
+    },
+    {
+      "id": "chart_packaging",
+      "title": "Volume by Packaging",
+      "type": "pie",
+      "groupByKey": "ITEM NAME",
+      "targetKey": "CONVERSION (LITRES)",
+      "operation": "sum"
+    }
+  ],
+  "filters": ["MONTH", "ITEM NAME"]
+}

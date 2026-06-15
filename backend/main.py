@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.generativeai as genai
 import os
+import json
 import logging
 import asyncio
 from dotenv import load_dotenv
@@ -13,6 +14,11 @@ from dotenv import load_dotenv
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def load_schema():
+    schema_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard_schema.json')
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 app = FastAPI(title="Synapse AI Backend")
 
@@ -162,49 +168,44 @@ async def get_sheet_data(spreadsheet_id: str, creds: Credentials = Depends(get_g
     logger.info(f"Fetching actual data for spreadsheet {spreadsheet_id}")
     def fetch_data():
         sheets_service = build('sheets', 'v4', credentials=creds, static_discovery=False)
-        # Assuming the tab name is 'RRBO Sales Report' based on previous metadata fetch
+        schema = load_schema()
+        sheet_range = schema.get("sheetRange", "'RRBO Sales Report'!A:E")
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id, 
-            range="'RRBO Sales Report'!A:E"
+            range=sheet_range
         ).execute()
         
         rows = result.get('values', [])
         parsed_data = []
+        columns_config = schema.get("columns", [])
         
         for row in rows:
-            # Skip empty rows or sub-headers (like "APRIL 2026")
-            if len(row) < 5:
+            if len(row) < len(columns_config):
                 continue
                 
-            oil_type = row[0].strip()
             # Skip the header rows and total rows
-            if oil_type.upper() == "OIL TYPE" or oil_type.lower().startswith("total") or not oil_type:
+            val_0 = str(row[0]).strip()
+            if not val_0 or val_0.lower() == "oil type" or val_0.lower().startswith("total"):
                 continue
                 
-            item_name = row[1].strip()
-            
-            # Parse numbers robustly (handling commas)
-            try:
-                qty_str = row[2].replace(',', '').strip()
-                qty = float(qty_str) if qty_str else 0.0
-            except ValueError:
-                qty = 0.0
+            record = {}
+            for col in columns_config:
+                idx = col["index"]
+                key = col["key"]
+                col_type = col.get("type", "string")
                 
-            try:
-                litres_str = row[3].replace(',', '').strip()
-                litres = float(litres_str) if litres_str else 0.0
-            except ValueError:
-                litres = 0.0
+                raw_val = row[idx].strip() if idx < len(row) else ""
                 
-            month = row[4].strip()
-            
-            parsed_data.append({
-                "OIL TYPE": oil_type,
-                "ITEM NAME": item_name,
-                "DELIVERY SALE (QTY)": qty,
-                "CONVERSION (LITRES)": litres,
-                "MONTH": month
-            })
+                if col_type == "number":
+                    try:
+                        clean_val = raw_val.replace(',', '').strip()
+                        record[key] = float(clean_val) if clean_val else 0.0
+                    except ValueError:
+                        record[key] = 0.0
+                else:
+                    record[key] = raw_val
+                    
+            parsed_data.append(record)
             
         return parsed_data
 

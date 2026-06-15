@@ -1,45 +1,81 @@
-# Dashboard Configuration Architecture
+# Centralized Schema Dashboard Architecture
 
-This file documents how the static dashboard schema works for Synapse AI. To eliminate LLM latency, save costs, and guarantee reliability, the dashboard layout is managed through a central TypeScript configuration file instead of dynamic AI generation.
+This file documents the centralized, schema-driven dashboard configuration structure for Synapse AI. To eliminate latency and API costs while maintaining flexibility, all column mappings, KPI metrics, chart aggregates, and filters are defined in a single root-level JSON file.
 
-## 1. Central Config File
-**Location:** `src/config/dashboards.ts`
+## 1. The Central Schema File
+**Location:** `dashboard_schema.json` (Project Root)
 
-This file is the Single Source of Truth for how dashboards render. It defines exactly what filters to show, what KPIs to calculate, and what charts to render based on the raw spreadsheet data.
+This file is the **Single Source of Truth** for both the Next.js React frontend and the FastAPI Python backend.
 
-### Example Schema
-```typescript
-export const jeevanRekhaDashboardConfig = {
-  id: "jeevan_rekha_sales",
-  spreadsheetId: "1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE",
-  schema: {
-    kpis: [ ... ],
-    charts: [ ... ],
-    filters: [ ... ]
-  }
-};
+```json
+{
+  "spreadsheetId": "1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE",
+  "sheetRange": "'RRBO Sales Report'!A:E",
+  "columns": [
+    { "index": 0, "key": "OIL TYPE", "headerName": "OIL TYPE", "type": "string" },
+    { "index": 1, "key": "ITEM NAME", "headerName": "ITEM NAME", "type": "string" },
+    { "index": 2, "key": "DELIVERY SALE (QTY)", "headerName": "DELIVERY SALE (QTY)", "type": "number" },
+    { "index": 3, "key": "CONVERSION (LITRES)", "headerName": "CONVERSION (LITRES)", "type": "number" },
+    { "index": 4, "key": "MONTH", "headerName": "MONTH", "type": "string" }
+  ],
+  "kpis": [
+    {
+      "id": "kpi_total_volume",
+      "title": "Total Volume (Litres)",
+      "description": "Total Rice Bran Oil conversion",
+      "operation": "sum",
+      "targetKey": "CONVERSION (LITRES)",
+      "format": "volume"
+    }
+  ],
+  "charts": [
+    {
+      "id": "chart_monthly_trend",
+      "title": "Monthly Volume Trend",
+      "type": "bar",
+      "groupByKey": "MONTH",
+      "targetKey": "CONVERSION (LITRES)",
+      "operation": "sum"
+    }
+  ],
+  "filters": ["MONTH", "ITEM NAME"]
+}
 ```
 
-## 2. Component Logic (`src/app/dashboard/page.tsx`)
+---
 
-The React component purely consumes this configuration. It performs standard `.reduce()` and `.map()` calculations on the raw `rawSheetData` matching against the `schema` IDs.
+## 2. Backend Processing (`backend/main.py`)
+The Python server reads `dashboard_schema.json` at startup. When parsing Google Sheets rows from the configured `sheetRange`:
+1. It validates that the row has enough columns matching `columns`.
+2. It strips and skips rows containing headers or "Total" labels.
+3. For each configured column, it extracts the cell value by `index`.
+4. It casts numeric values to floats (replacing commas) if configured as `type: "number"`.
+5. It outputs a standardized JSON payload mapping cell values to `key`.
 
-### Adding a New KPI
-1. Add an entry to the `kpis` array in `dashboards.ts`.
-2. Give it a unique `id` (e.g., `kpi_total_revenue`).
-3. In `page.tsx`, within the `kpis.map` render logic, add an `else if (kpi.id === 'kpi_total_revenue')` condition to handle the calculation logic (e.g., `reduce` on the Revenue column).
+---
 
-### Adding a New Chart
-1. Add an entry to the `charts` array in `dashboards.ts`. Specify the `type` (`bar`, `pie`, `line`).
-2. Set the `xAxis` and `yAxis` titles matching the Spreadsheet Column names.
-3. In `page.tsx`, within the `charts.map` render logic, process the array of `filteredData` into the `xAxisData` and `seriesData` required by ECharts based on your chart's `id`.
+## 3. Frontend Rendering (`src/app/dashboard/page.tsx`)
+The React application loads `dashboard_schema.json` directly. The frontend is fully dynamic:
+
+* **Global Filters:** Dynamically builds dropdowns and filters data matching the keys specified in the `filters` array.
+* **KPI Calculations:** Iterates through `kpis` and dynamically runs calculations (`sum`, `count`, or `average`) on the `targetKey` column across the filtered data.
+* **ECharts Aggregation:** Iterates through `charts`, grouping and aggregating row values matching the configured `groupByKey` and `targetKey` using the specified `operation`, then supplies the data directly to Apache ECharts.
+
+---
+
+## 4. How to Extend the Dashboard
+
+### Adding a New Column
+1. Ensure the backend sheet range fetches the column. Update `sheetRange` in `dashboard_schema.json` if necessary (e.g. `'RRBO Sales Report'!A:F`).
+2. Add a new item to the `columns` array in `dashboard_schema.json`. Define its `index`, standard `key` name, `headerName`, and `type`.
 
 ### Adding a New Filter
-1. Simply add the EXACT column name to the `filters` array in `dashboards.ts` (e.g., `"REGION"`).
-2. The UI will automatically render a dropdown for it and perform AND-based filtering across all active filters.
+1. Just add the exact standardized column key name to the `filters` array in `dashboard_schema.json`. The React UI will automatically build the dropdown and handle multi-filter combinations.
 
-## 3. Vibe Coding Guidelines
-If you are an AI Agent tasked with modifying the dashboard in the future:
-- **Do not use the Gemini LLM for layout generation.** Rely entirely on `dashboards.ts`.
-- **Modifying Data:** If the user adds a new sheet column, update the calculation logic in `page.tsx` and add the metadata to `dashboards.ts`.
-- **New Dashboards:** If the user wants to add an entirely new Google Sheet, create a new config object in `dashboards.ts` and set up routing to switch between configurations.
+### Adding a New KPI
+1. Add an entry to the `kpis` array in `dashboard_schema.json`.
+2. Specify the `title`, `description`, `operation` (`sum`/`count`/`average`), `targetKey`, and `format` (`volume`/`units`). The dashboard will dynamically compute and display it.
+
+### Adding a New Chart
+1. Add an entry to the `charts` array in `dashboard_schema.json`.
+2. Specify the `title`, `type` (`bar`/`pie`), `groupByKey`, `targetKey`, and `operation` (`sum`/`count`). The grid will dynamically compute values, select appropriate styling/colors, and render the new EChart component.

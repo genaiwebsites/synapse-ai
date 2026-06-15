@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, BarChart2, Filter, LogOut } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import ReactECharts from "echarts-for-react";
-import { jeevanRekhaDashboardConfig } from "@/config/dashboards";
+import generatedSchema from "../../../dashboard_schema.json";
 
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
@@ -25,13 +25,11 @@ export default function DashboardPage() {
   const [activeFilters, setActiveFilters] = useState<{ [key: string]: string }>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  const generatedSchema = jeevanRekhaDashboardConfig.schema;
-
   const fetchLiveData = async (isBackground = false) => {
     if (!accessToken) return;
     if (!isBackground) setIsLoadingData(true);
     try {
-      const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE/data`, {
+      const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/${generatedSchema.spreadsheetId}/data`, {
         headers: { "Authorization": `Bearer ${accessToken}` }
       });
       const sheetData = await dataRes.json();
@@ -166,13 +164,19 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 w-full">
                 {generatedSchema.kpis.map((kpi: any) => {
                   let kpiValue = 0;
-                  if (kpi.id === 'kpi_total_volume') {
-                    kpiValue = filteredData.reduce((sum, row) => sum + (row['CONVERSION (LITRES)'] || 0), 0);
-                  } else if (kpi.id === 'kpi_total_qty') {
-                    kpiValue = filteredData.reduce((sum, row) => sum + (row['DELIVERY SALE (QTY)'] || 0), 0);
+                  const targetKey = kpi.targetKey;
+                  const operation = kpi.operation || "sum";
+                  
+                  if (operation === "sum") {
+                    kpiValue = filteredData.reduce((sum, row) => sum + (Number(row[targetKey]) || 0), 0);
+                  } else if (operation === "count") {
+                    kpiValue = filteredData.length;
+                  } else if (operation === "average") {
+                    const sum = filteredData.reduce((s, row) => s + (Number(row[targetKey]) || 0), 0);
+                    kpiValue = filteredData.length ? sum / filteredData.length : 0;
                   }
                   
-                  const displayValue = kpi.id === 'kpi_total_volume' 
+                  const displayValue = kpi.format === 'volume' 
                     ? `${kpiValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} L`
                     : `${kpiValue.toLocaleString()} Units`;
 
@@ -202,40 +206,43 @@ export default function DashboardPage() {
                 {generatedSchema.charts.map((chart: any) => {
                   const isPie = chart.type === 'pie';
                   
-                  // Dynamic Chart Data Processing
+                  // Dynamic Chart Data Aggregation
                   let xAxisData: string[] = [];
                   let seriesData: any[] = [];
                   
-                  if (isPie && chart.id === 'chart_packaging') {
-                    const pieDataMap: Record<string, number> = {};
+                  const groupByKey = chart.groupByKey;
+                  const targetKey = chart.targetKey;
+                  const operation = chart.operation || "sum";
+                  
+                  if (groupByKey && targetKey) {
+                    const dataMap: Record<string, number> = {};
+                    
                     filteredData.forEach(row => {
-                       const itemName = row['ITEM NAME'];
-                       const litres = row['CONVERSION (LITRES)'] || 0;
-                       if (itemName) {
-                           pieDataMap[itemName] = (pieDataMap[itemName] || 0) + litres;
-                       }
+                      const groupVal = row[groupByKey];
+                      const numericVal = Number(row[targetKey]) || 0;
+                      
+                      if (groupVal) {
+                        if (operation === "sum") {
+                          dataMap[groupVal] = (dataMap[groupVal] || 0) + numericVal;
+                        } else if (operation === "count") {
+                          dataMap[groupVal] = (dataMap[groupVal] || 0) + 1;
+                        }
+                      }
                     });
                     
-                    const colors = ['#00F0FF', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#3b82f6'];
-                    seriesData = Object.entries(pieDataMap)
-                      .map(([name, value], i) => ({ 
-                        name, 
-                        value: Number(value.toFixed(2)),
-                        itemStyle: { color: colors[i % colors.length] } 
-                      }))
-                      .sort((a,b) => b.value - a.value);
-                  } 
-                  else if (!isPie && chart.id === 'chart_monthly_trend') {
-                    const barDataMap: Record<string, number> = {};
-                    filteredData.forEach(row => {
-                       const month = row['MONTH'];
-                       const litres = row['CONVERSION (LITRES)'] || 0;
-                       if (month) {
-                           barDataMap[month] = (barDataMap[month] || 0) + litres;
-                       }
-                    });
-                    xAxisData = Object.keys(barDataMap);
-                    seriesData = xAxisData.map(m => Number(barDataMap[m].toFixed(2)));
+                    if (isPie) {
+                      const colors = ['#00F0FF', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#3b82f6'];
+                      seriesData = Object.entries(dataMap)
+                        .map(([name, value], i) => ({ 
+                          name, 
+                          value: Number(value.toFixed(2)),
+                          itemStyle: { color: colors[i % colors.length] } 
+                        }))
+                        .sort((a, b) => b.value - a.value);
+                    } else {
+                      xAxisData = Object.keys(dataMap);
+                      seriesData = xAxisData.map(key => Number(dataMap[key].toFixed(2)));
+                    }
                   }
                   
                   const option = {
