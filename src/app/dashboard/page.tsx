@@ -32,9 +32,17 @@ export default function DashboardPage() {
       const dataRes = await fetch(`${getApiBaseUrl()}/api/sheets/${generatedSchema.spreadsheetId}/data`, {
         headers: { "Authorization": `Bearer ${accessToken}` }
       });
+      if (!dataRes.ok) {
+        const errText = await dataRes.text();
+        throw new Error(`Server returned ${dataRes.status}: ${errText}`);
+      }
       const sheetData = await dataRes.json();
-      setRawSheetData(sheetData);
-      setLastSynced(new Date().toLocaleString());
+      if (Array.isArray(sheetData)) {
+        setRawSheetData(sheetData);
+        setLastSynced(new Date().toLocaleString());
+      } else {
+        console.error("Expected array from sheet data API, but got:", sheetData);
+      }
     } catch (err) {
       console.error("Live data fetch failed:", err);
     } finally {
@@ -80,12 +88,14 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [accessToken]);
 
-  const filteredData = rawSheetData.filter(row => {
-    return Object.entries(activeFilters).every(([key, value]) => {
-      if (!value) return true; // 'All' selected
-      return row[key] === value;
-    });
-  });
+  const filteredData = Array.isArray(rawSheetData) 
+    ? rawSheetData.filter(row => {
+        return Object.entries(activeFilters).every(([key, value]) => {
+          if (!value) return true; // 'All' selected
+          return row[key] === value;
+        });
+      })
+    : [];
 
   const handleLogout = async () => {
     try {
@@ -138,7 +148,9 @@ export default function DashboardPage() {
                   <Filter className="w-4 h-4" /> Global Filters:
                 </div>
                 {generatedSchema.filters.map((filter: string) => {
-                   const uniqueValues = Array.from(new Set(rawSheetData.map(row => row[filter]))).filter(Boolean);
+                   const uniqueValues = Array.isArray(rawSheetData)
+                     ? Array.from(new Set(rawSheetData.map(row => row[filter]))).filter(Boolean)
+                     : [];
                    return (
                      <div key={filter} className="flex items-center gap-2">
                        <span className="text-zinc-500 text-sm font-sans">{filter}:</span>
