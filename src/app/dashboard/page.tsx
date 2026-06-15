@@ -6,9 +6,10 @@ import { signOut } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, RefreshCw, BarChart2, Filter } from "lucide-react";
+import { RefreshCw, BarChart2, Filter, LogOut } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import ReactECharts from "echarts-for-react";
+import { jeevanRekhaDashboardConfig } from "@/config/dashboards";
 
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
@@ -20,17 +21,11 @@ const getApiBaseUrl = () => {
 export default function DashboardPage() {
   const { accessToken } = useAuth();
   const [lastSynced, setLastSynced] = useState<string>("Never");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedSchema, setGeneratedSchema] = useState<any>(null);
   const [rawSheetData, setRawSheetData] = useState<any[]>([]);
   const [activeFilters, setActiveFilters] = useState<{ [key: string]: string }>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  const isGeneratedRef = React.useRef(false);
-
-  React.useEffect(() => {
-    isGeneratedRef.current = !!generatedSchema;
-  }, [generatedSchema]);
+  const generatedSchema = jeevanRekhaDashboardConfig.schema;
 
   const fetchLiveData = async (isBackground = false) => {
     if (!accessToken) return;
@@ -49,6 +44,13 @@ export default function DashboardPage() {
     }
   };
 
+  // Fetch data on initial mount once accessToken is available
+  useEffect(() => {
+    if (accessToken) {
+      fetchLiveData(false);
+    }
+  }, [accessToken]);
+
   useEffect(() => {
     let initialLoad = true;
     const unsub = onSnapshot(
@@ -58,8 +60,7 @@ export default function DashboardPage() {
           const data = docSnapshot.data();
           if (data.lastUpdated) {
             // Only trigger background fetch if it's not the initial mount subscription
-            // and the schema has already been generated
-            if (!initialLoad && isGeneratedRef.current) {
+            if (!initialLoad) {
               console.log("Webhook triggered Firestore update! Fetching new data...");
               fetchLiveData(true);
             }
@@ -74,40 +75,12 @@ export default function DashboardPage() {
   // Foolproof Fallback: Auto-poll the spreadsheet every 1 hour (3600000 ms)
   // Guarantees data stays fresh even if the Webhook / Cloud Function fails to trigger
   useEffect(() => {
-    if (!generatedSchema) return;
     const interval = setInterval(() => {
       console.log("Auto-polling spreadsheet data...");
       fetchLiveData(true);
     }, 3600000); // 1 hour
     return () => clearInterval(interval);
-  }, [generatedSchema, accessToken]);
-
-  const handleGenerateLayout = async () => {
-    if (!accessToken) return;
-    setIsGenerating(true);
-    try {
-      const response = await fetch("http://localhost:8080/api/orchestrate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({ spreadsheet_id: "1nqTsRsYg0_iye9OblBoneGFfM4bqRBZ6kdG-tzYHfpE" })
-      });
-      const data = await response.json();
-      console.log("--- GENERATED ORCHESTRATION SCHEMA ---");
-      console.log(data);
-      setGeneratedSchema(data);
-      
-      // Fetch Live Data
-      await fetchLiveData(false);
-    } catch (err) {
-      console.error("Orchestration failed:", err);
-    } finally {
-      setIsGenerating(false);
-      setIsLoadingData(false);
-    }
-  };
+  }, [accessToken]);
 
   const filteredData = rawSheetData.filter(row => {
     return Object.entries(activeFilters).every(([key, value]) => {
@@ -159,20 +132,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Blank main content area for Phase 2 Generative orchestration */}
-        {!generatedSchema ? (
-          <div className="mt-8 p-12 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-center bg-[rgba(12,12,18,0.5)] backdrop-blur-xl shadow-2xl min-h-[500px]">
-            <p className="text-zinc-400 font-medium font-sans mb-6">Dashboard charts pending generative layout...</p>
-            <Button 
-              onClick={handleGenerateLayout} 
-              disabled={isGenerating}
-              className="bg-[#00F0FF]/10 text-[#00F0FF] hover:bg-[#00F0FF]/20 border border-[#00F0FF]/30 shadow-[0_0_15px_rgba(0,240,255,0.15)] font-space tracking-wide"
-            >
-              {isGenerating ? "Analyzing Data via Gemini..." : "Generate Intelligence Layout"}
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-8 w-full animate-in fade-in zoom-in duration-500">
+        <div className="mt-8 w-full animate-in fade-in zoom-in duration-500">
             {/* Filters Bar */}
             {generatedSchema.filters && (
               <div className="flex flex-wrap gap-4 mb-6 p-4 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.15)] items-center">
@@ -343,7 +303,6 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        )}
       </div>
     </DashboardLayout>
   );
