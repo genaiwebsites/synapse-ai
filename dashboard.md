@@ -3,7 +3,7 @@
 This file documents the centralized, schema-driven dashboard configuration structure for Synapse AI. To eliminate latency and API costs while maintaining flexibility, all column mappings, KPI metrics, chart aggregates, and filters are defined in a single root-level JSON file.
 
 ## 1. The Central Schema File
-**Location:** `dashboard_schema.json` (Project Root)
+**Location:** `backend/dashboard_schema.json`
 
 This file is the **Single Source of Truth** for both the Next.js React frontend and the FastAPI Python backend.
 

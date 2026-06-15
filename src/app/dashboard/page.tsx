@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, BarChart2, Filter, LogOut } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import ReactECharts from "echarts-for-react";
-import generatedSchema from "../../../dashboard_schema.json";
+import generatedSchema from "../../../backend/dashboard_schema.json";
 
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {

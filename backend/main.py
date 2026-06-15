@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def load_schema():
-    schema_path = os.path.join(os.path.dirname(__file__), '..', 'dashboard_schema.json')
+    schema_path = os.path.join(os.path.dirname(__file__), 'dashboard_schema.json')
     with open(schema_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
